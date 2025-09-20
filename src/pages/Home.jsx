@@ -1,34 +1,96 @@
 import axios from "axios";
-import { useEffect, useState } from "react";
-import { FaEye, FaTrash } from "react-icons/fa";
+import { useEffect, useMemo, useState } from "react";
+import { FaEye, FaTrash, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
 import { FaPencil } from "react-icons/fa6";
 import { NavLink } from "react-router-dom";
-import ViewLayout from "./ViewLayout";
+import ViewLayout from "./viewLayout";
 
 const API = "https://68be829f9c70953d96ec8200.mockapi.io/api/romm-furniture";
 
 export default function Home() {
   const [layouts, setLayouts] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: null });
   const [showModal, setShowModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
 
+  /* ---------------- Fetch Data ---------------- */
   useEffect(() => {
-    fetchLayouts();
+    (async () => {
+      try {
+        const res = await axios.get(API);
+        setLayouts(res.data);
+      } catch (err) {
+        console.error(err);
+      }
+    })();
   }, []);
 
-  const fetchLayouts = async () => {
-    try {
-      const res = await axios.get(API);
-      setLayouts(res.data);
-    } catch (err) {
-      console.error(err);
+  /* ---------------- Utilities ---------------- */
+  const finalPrice = (price, discount) =>
+    discount && discount > 0 ? Math.round(price - (price * discount) / 100) : price;                     
+
+  /* ---------------- Derived List (search + sort) ---------------- */
+  const filteredAndSorted = useMemo(() => {
+    let data = layouts;
+
+    // 1️⃣ Search
+    if (searchTerm.trim()) {
+      const lower = searchTerm.toLowerCase();
+      data = data.filter((item) => item.roomName.toLowerCase().includes(lower));
     }
+
+    // 2️⃣ Sort
+    if (sortConfig.key) {
+      data = [...data].sort((a, b) => {
+        const key = sortConfig.key;
+
+        // Special handling for finalPrice
+        if (key === "finalPrice") {
+          const aVal = finalPrice(a.price, a.discount || 0);
+          const bVal = finalPrice(b.price, b.discount || 0);
+          return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
+        }
+
+        const aVal = a[key];
+        const bVal = b[key];
+
+        // Case-insensitive, locale-aware string comparison
+        if (typeof aVal === "string" && typeof bVal === "string") {
+          return sortConfig.direction === "asc"
+            ? aVal.localeCompare(bVal, undefined, { sensitivity: "base" })
+            : bVal.localeCompare(aVal, undefined, { sensitivity: "base" });
+        }
+
+        // Numbers or other types
+        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return data;
+  }, [layouts, searchTerm, sortConfig]);
+
+  /* ---------------- Handlers ---------------- */
+  const requestSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key && prev.direction === "asc") {
+        return { key, direction: "desc" };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const SortIcon = ({ column }) => {
+    if (sortConfig.key !== column) return <FaSort />;
+    return sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />;
   };
 
   const removeLayout = async (id) => {
     if (window.confirm("Delete this layout?")) {
       await axios.delete(`${API}/${id}`);
-      fetchLayouts();
+      setLayouts((prev) => prev.filter((l) => l.id !== id));
     }
   };
 
@@ -36,19 +98,25 @@ export default function Home() {
     setSelectedRoom(room);
     setShowModal(true);
   };
-
   const closeModal = () => {
     setShowModal(false);
     setSelectedRoom(null);
   };
 
-  const finalPrice = (price, discount) =>
-    discount && discount > 0 ? Math.round(price - (price * discount) / 100) : price;
-
+  /* ---------------- Render ---------------- */
   return (
     <div className="container my-5">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="fw-bold text-dark">Room Layouts</h2>
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
+        <h2 className="fw-bold text-dark mb-0">Room Layouts</h2>
+
+        <input
+          type="text"
+          placeholder="Search by room name..."
+          className="form-control w-auto"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+
         <NavLink to="/add-std" className="btn btn-primary">
           Add Layout
         </NavLink>
@@ -60,17 +128,25 @@ export default function Home() {
             <tr>
               <th>#</th>
               <th>Image</th>
-              <th>Room</th>
+              <th onClick={() => requestSort("roomName")} style={{ cursor: "pointer" }}>
+                Room <SortIcon column="roomName" />
+              </th>
               <th>Dimensions</th>
-              <th>MRP</th>
-              <th>Discount</th>
-              <th>Final Price</th>
+              <th onClick={() => requestSort("price")} style={{ cursor: "pointer" }}>
+                MRP <SortIcon column="price" />
+              </th>
+              <th onClick={() => requestSort("discount")} style={{ cursor: "pointer" }}>
+                Discount <SortIcon column="discount" />
+              </th>
+              <th onClick={() => requestSort("finalPrice")} style={{ cursor: "pointer" }}>
+                Final Price <SortIcon column="finalPrice" />
+              </th>
               <th>Availability</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {layouts.map((r, i) => {
+            {filteredAndSorted.map((r, i) => {
               const fPrice = finalPrice(r.price, r.discount || 0);
               return (
                 <tr key={r.id}>
@@ -89,7 +165,12 @@ export default function Home() {
                       />
                     ) : (
                       <div
-                        style={{ width: 100, height: 70, background: "#f0f0f0", borderRadius: 8 }}
+                        style={{
+                          width: 100,
+                          height: 70,
+                          background: "#f0f0f0",
+                          borderRadius: 8,
+                        }}
                       />
                     )}
                   </td>
@@ -135,7 +216,7 @@ export default function Home() {
         </table>
       </div>
 
-      {/* ===== Bootstrap Modal ===== */}
+      {/* Modal */}
       {showModal && (
         <div
           className="modal fade show"

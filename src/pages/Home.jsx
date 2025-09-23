@@ -14,7 +14,7 @@ export default function Home() {
   const [showModal, setShowModal] = useState(false);
   const [selectedRoom, setSelectedRoom] = useState(null);
 
-  /* ---------------- Fetch Data ---------------- */
+  /* ---------- Fetch ---------- */
   useEffect(() => {
     (async () => {
       try {
@@ -26,48 +26,39 @@ export default function Home() {
     })();
   }, []);
 
-  /* ---------------- Utilities ---------------- */
   const finalPrice = (price, discount) =>
     discount && discount > 0 ? Math.round(price - (price * discount) / 100) : price;
 
-  /* ---------------- Derived List ---------------- */
+  /* ---------- Derived List ---------- */
   const filteredAndSorted = useMemo(() => {
     let data = layouts;
-
     if (searchTerm.trim()) {
       const lower = searchTerm.toLowerCase();
       data = data.filter((item) => item.roomName.toLowerCase().includes(lower));
     }
-
     if (sortConfig.key) {
       data = [...data].sort((a, b) => {
         const key = sortConfig.key;
+        const dir = sortConfig.direction === "asc" ? 1 : -1;
 
         if (key === "finalPrice") {
-          const aVal = finalPrice(a.price, a.discount || 0);
-          const bVal = finalPrice(b.price, b.discount || 0);
-          return sortConfig.direction === "asc" ? aVal - bVal : bVal - aVal;
+          return (
+            (finalPrice(a.price, a.discount || 0) -
+              finalPrice(b.price, b.discount || 0)) * dir
+          );
         }
 
         const aVal = a[key];
         const bVal = b[key];
-
-        if (typeof aVal === "string" && typeof bVal === "string") {
-          return sortConfig.direction === "asc"
-            ? aVal.localeCompare(bVal, undefined, { sensitivity: "base" })
-            : bVal.localeCompare(aVal, undefined, { sensitivity: "base" });
-        }
-
-        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
+        if (typeof aVal === "string")
+          return aVal.localeCompare(bVal, undefined, { sensitivity: "base" }) * dir;
+        return (aVal - bVal) * dir;
       });
     }
-
     return data;
   }, [layouts, searchTerm, sortConfig]);
 
-  /* ---------------- Handlers ---------------- */
+  /* ---------- Handlers ---------- */
   const removeLayout = async (id) => {
     if (window.confirm("Delete this layout?")) {
       await axios.delete(`${API}/${id}`);
@@ -84,30 +75,26 @@ export default function Home() {
     setSelectedRoom(null);
   };
 
-  /* ---------------- Render ---------------- */
+  /* ---------- UI ---------- */
   return (
     <div className="container my-5">
-      {/* Top bar with title, search, nicely styled sort box, and add button */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
-        <h2 className="fw-bold text-dark mb-0">Room Layouts</h2>
+      {/* === Page Header === */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-5 gap-3">
+        <h1 className="fw-bold text-primary">Room Furniture</h1>
 
-        <div className="d-flex flex-wrap gap-2 align-items-center">
+        <div className="d-flex flex-wrap gap-2">
           <input
             type="text"
-            placeholder="Search by room name..."
-            className="form-control"
-            style={{ minWidth: 200 }}
+            className="form-control shadow-sm"
+            style={{ minWidth: 220 }}
+            placeholder="Search by room name…"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
 
-          {/* 🌟 Styled sort dropdown */}
           <select
-            className="form-select border-primary text-primary fw-semibold shadow-sm"
-            style={{
-              minWidth: 180,
-              borderRadius: "0.5rem",
-            }}
+            className="form-select shadow-sm"
+            style={{ minWidth: 180 }}
             value={sortConfig.key ? `${sortConfig.key}-${sortConfig.direction}` : ""}
             onChange={(e) => {
               const [key, dir] = e.target.value.split("-");
@@ -116,8 +103,8 @@ export default function Home() {
             }}
           >
             <option value="">Sort by…</option>
-            <option value="roomName-asc">Room ↑</option>
-            <option value="roomName-desc">Room ↓</option>
+            <option value="roomName-asc">Name ↑</option>
+            <option value="roomName-desc">Name ↓</option>
             <option value="price-asc">Price ↑</option>
             <option value="price-desc">Price ↓</option>
             <option value="discount-asc">Discount ↑</option>
@@ -125,101 +112,107 @@ export default function Home() {
             <option value="finalPrice-asc">Final Price ↑</option>
             <option value="finalPrice-desc">Final Price ↓</option>
           </select>
-        </div>
 
-        <NavLink to="/add-std" className="btn btn-primary px-4 py-2 shadow-sm">
-          Add Layout
-        </NavLink>
+          <NavLink to="/add-std" className="btn btn-primary shadow-sm">
+            + Add Layout
+          </NavLink>
+        </div>
       </div>
 
-      {/* Table */}
-      <div className="table-responsive shadow-sm rounded-3">
-        <table className="table table-hover align-middle text-center mb-0">
-          <thead className="table-dark">
-            <tr>
-              <th>#</th>
-              <th>Image</th>
-              <th>Room</th>
-              <th>Dimensions</th>
-              <th>MRP</th>
-              <th>Discount</th>
-              <th>Final Price</th>
-              <th>Availability</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAndSorted.map((r, i) => {
-              const fPrice = finalPrice(r.price, r.discount || 0);
-              return (
-                <tr key={r.id}>
-                  <td>{i + 1}</td>
-                  <td>
-                    {r.image ? (
-                      <img
-                        src={r.image}
-                        alt={r.roomName}
-                        style={{
-                          width: 100,
-                          height: 70,
-                          objectFit: "cover",
-                          borderRadius: 8,
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          width: 100,
-                          height: 70,
-                          background: "#f0f0f0",
-                          borderRadius: 8,
-                        }}
-                      />
+      {/* === Product Grid === */}
+      {filteredAndSorted.length === 0 && (
+        <p className="text-center text-muted fs-5">No rooms match your search.</p>
+      )}
+
+      <div className="row g-4">
+        {filteredAndSorted.map((r) => {
+          const fPrice = finalPrice(r.price, r.discount || 0);
+          const outOfStock = r.available === false;
+
+          return (
+            <div key={r.id} className="col-sm-6 col-md-4 col-lg-3">
+              <div className="card h-100 shadow-sm border-0 rounded-4">
+                {/* Image */}
+                {r.image ? (
+                  <img
+                    src={r.image}
+                    className="card-img-top rounded-top-4"
+                    alt={r.roomName}
+                    style={{ height: 180, objectFit: "cover" }}
+                  />
+                ) : (
+                  <div
+                    className="d-flex justify-content-center align-items-center bg-light rounded-top-4"
+                    style={{ height: 180 }}
+                  >
+                    <span className="text-muted">No Image</span>
+                  </div>
+                )}
+
+                {/* Body */}
+                <div className="card-body d-flex flex-column">
+                  <h5 className="card-title text-capitalize fw-semibold mb-1">
+                    {r.roomName}
+                  </h5>
+                  <p className="text-muted small mb-2">
+                    {r.width} × {r.length} ft
+                  </p>
+
+                  <div className="mb-2">
+                    {r.discount > 0 && (
+                      <span className="badge bg-danger me-2">
+                        -{r.discount}%
+                      </span>
                     )}
-                  </td>
-                  <td className="text-capitalize fw-semibold">{r.roomName}</td>
-                  <td>{r.width} × {r.length} ft</td>
-                  <td>₹{r.price}</td>
-                  <td className="text-danger fw-bold">{r.discount || 0}%</td>
-                  <td className="text-success fw-bold">₹{fPrice}</td>
-                  <td>
-                    {r.available === false ? (
-                      <span className="badge bg-danger">Out</span>
-                    ) : (
-                      <span className="badge bg-success">In</span>
-                    )}
-                  </td>
-                  <td>
-                    <button
-                      onClick={() => removeLayout(r.id)}
-                      className="btn btn-sm btn-outline-danger me-2"
-                      title="Delete"
+                    <span
+                      className={`fw-bold ${
+                        r.discount > 0 ? "text-decoration-line-through text-muted" : ""
+                      }`}
                     >
-                      <FaTrash />
+                      ₹{r.price}
+                    </span>
+                    {r.discount > 0 && (
+                      <span className="fw-bold text-success ms-2">₹{fPrice}</span>
+                    )}
+                  </div>
+
+                  <span
+                    className={`badge ${outOfStock ? "bg-danger" : "bg-success"} mb-3`}
+                  >
+                    {outOfStock ? "Out of Stock" : "In Stock"}
+                  </span>
+
+                  <div className="mt-auto d-flex justify-content-between gap-2">
+                    <button
+                      onClick={() => openModal(r)}
+                      className="btn btn-sm btn-outline-primary flex-fill"
+                      title="View"
+                    >
+                      <FaEye />
                     </button>
                     <NavLink
                       to={`/update-std/${r.id}`}
-                      className="btn btn-sm btn-outline-warning me-2"
+                      className="btn btn-sm btn-outline-warning flex-fill"
                       title="Edit"
                     >
                       <FaPencil />
                     </NavLink>
                     <button
-                      onClick={() => openModal(r)}
-                      className="btn btn-sm btn-outline-primary"
-                      title="View"
+                      onClick={() => removeLayout(r.id)}
+                      className="btn btn-sm btn-outline-danger flex-fill"
+                      title="Delete"
                     >
-                      <FaEye />
+                      <FaTrash />
                     </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Modal */}
+      {/* === Modal for View === */}
       {showModal && (
         <div
           className="modal fade show"

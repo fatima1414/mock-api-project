@@ -1,6 +1,6 @@
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
-import { FaEye, FaTrash, FaSort, FaSortUp, FaSortDown } from "react-icons/fa";
+import { FaEye, FaTrash } from "react-icons/fa";
 import { FaPencil } from "react-icons/fa6";
 import { NavLink } from "react-router-dom";
 import ViewLayout from "./viewLayout";
@@ -28,24 +28,21 @@ export default function Home() {
 
   /* ---------------- Utilities ---------------- */
   const finalPrice = (price, discount) =>
-    discount && discount > 0 ? Math.round(price - (price * discount) / 100) : price;                     
+    discount && discount > 0 ? Math.round(price - (price * discount) / 100) : price;
 
-  /* ---------------- Derived List (search + sort) ---------------- */
+  /* ---------------- Derived List ---------------- */
   const filteredAndSorted = useMemo(() => {
     let data = layouts;
 
-    // 1️⃣ Search
     if (searchTerm.trim()) {
       const lower = searchTerm.toLowerCase();
       data = data.filter((item) => item.roomName.toLowerCase().includes(lower));
     }
 
-    // 2️⃣ Sort
     if (sortConfig.key) {
       data = [...data].sort((a, b) => {
         const key = sortConfig.key;
 
-        // Special handling for finalPrice
         if (key === "finalPrice") {
           const aVal = finalPrice(a.price, a.discount || 0);
           const bVal = finalPrice(b.price, b.discount || 0);
@@ -55,14 +52,12 @@ export default function Home() {
         const aVal = a[key];
         const bVal = b[key];
 
-        // Case-insensitive, locale-aware string comparison
         if (typeof aVal === "string" && typeof bVal === "string") {
           return sortConfig.direction === "asc"
             ? aVal.localeCompare(bVal, undefined, { sensitivity: "base" })
             : bVal.localeCompare(aVal, undefined, { sensitivity: "base" });
         }
 
-        // Numbers or other types
         if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
         return 0;
@@ -73,20 +68,6 @@ export default function Home() {
   }, [layouts, searchTerm, sortConfig]);
 
   /* ---------------- Handlers ---------------- */
-  const requestSort = (key) => {
-    setSortConfig((prev) => {
-      if (prev.key === key && prev.direction === "asc") {
-        return { key, direction: "desc" };
-      }
-      return { key, direction: "asc" };
-    });
-  };
-
-  const SortIcon = ({ column }) => {
-    if (sortConfig.key !== column) return <FaSort />;
-    return sortConfig.direction === "asc" ? <FaSortUp /> : <FaSortDown />;
-  };
-
   const removeLayout = async (id) => {
     if (window.confirm("Delete this layout?")) {
       await axios.delete(`${API}/${id}`);
@@ -106,41 +87,63 @@ export default function Home() {
   /* ---------------- Render ---------------- */
   return (
     <div className="container my-5">
+      {/* Top bar with title, search, nicely styled sort box, and add button */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-center mb-4 gap-3">
         <h2 className="fw-bold text-dark mb-0">Room Layouts</h2>
 
-        <input
-          type="text"
-          placeholder="Search by room name..."
-          className="form-control w-auto"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
+        <div className="d-flex flex-wrap gap-2 align-items-center">
+          <input
+            type="text"
+            placeholder="Search by room name..."
+            className="form-control"
+            style={{ minWidth: 200 }}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
 
-        <NavLink to="/add-std" className="btn btn-primary">
+          {/* 🌟 Styled sort dropdown */}
+          <select
+            className="form-select border-primary text-primary fw-semibold shadow-sm"
+            style={{
+              minWidth: 180,
+              borderRadius: "0.5rem",
+            }}
+            value={sortConfig.key ? `${sortConfig.key}-${sortConfig.direction}` : ""}
+            onChange={(e) => {
+              const [key, dir] = e.target.value.split("-");
+              if (key) setSortConfig({ key, direction: dir });
+              else setSortConfig({ key: null, direction: null });
+            }}
+          >
+            <option value="">Sort by…</option>
+            <option value="roomName-asc">Room ↑</option>
+            <option value="roomName-desc">Room ↓</option>
+            <option value="price-asc">Price ↑</option>
+            <option value="price-desc">Price ↓</option>
+            <option value="discount-asc">Discount ↑</option>
+            <option value="discount-desc">Discount ↓</option>
+            <option value="finalPrice-asc">Final Price ↑</option>
+            <option value="finalPrice-desc">Final Price ↓</option>
+          </select>
+        </div>
+
+        <NavLink to="/add-std" className="btn btn-primary px-4 py-2 shadow-sm">
           Add Layout
         </NavLink>
       </div>
 
+      {/* Table */}
       <div className="table-responsive shadow-sm rounded-3">
         <table className="table table-hover align-middle text-center mb-0">
           <thead className="table-dark">
             <tr>
               <th>#</th>
               <th>Image</th>
-              <th onClick={() => requestSort("roomName")} style={{ cursor: "pointer" }}>
-                Room <SortIcon column="roomName" />
-              </th>
+              <th>Room</th>
               <th>Dimensions</th>
-              <th onClick={() => requestSort("price")} style={{ cursor: "pointer" }}>
-                MRP <SortIcon column="price" />
-              </th>
-              <th onClick={() => requestSort("discount")} style={{ cursor: "pointer" }}>
-                Discount <SortIcon column="discount" />
-              </th>
-              <th onClick={() => requestSort("finalPrice")} style={{ cursor: "pointer" }}>
-                Final Price <SortIcon column="finalPrice" />
-              </th>
+              <th>MRP</th>
+              <th>Discount</th>
+              <th>Final Price</th>
               <th>Availability</th>
               <th>Actions</th>
             </tr>
